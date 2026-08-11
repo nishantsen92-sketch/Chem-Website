@@ -5,6 +5,8 @@ import React from 'react';
 interface AestheticNoteSheetProps {
   topic: string;
   notes_markdown: string;
+  notes_cards?: any[];
+  script?: string;
 }
 
 interface Section {
@@ -12,22 +14,69 @@ interface Section {
   content: string;
 }
 
-export default function AestheticNoteSheet({ topic, notes_markdown }: AestheticNoteSheetProps) {
+export default function AestheticNoteSheet({ topic, notes_markdown, notes_cards, script }: AestheticNoteSheetProps) {
   
-  // Parse raw markdown chapters into structured card segments
-  const parseMarkdown = (md: string): Section[] => {
-    if (!md) return [];
-    const rawSections = md.split(/(?=^#{1,3} )/m).filter(Boolean);
-    return rawSections.map((sec) => {
-      const lines = sec.trim().split('\n');
-      const titleLine = lines[0] || '';
-      const title = titleLine.replace(/^#{1,3}\s+/, '').trim();
-      const content = lines.slice(1).join('\n').trim();
+  // Build visual segments safely, resolving fallback text blocks if empty
+  const buildCards = (): Section[] => {
+    // 1. Check if structured notes array is already populated
+    if (notes_cards && Array.isArray(notes_cards) && notes_cards.length > 0) {
+      return notes_cards.map((c) => ({
+        title: c.title || 'Summary Details',
+        content: Array.isArray(c.bullets) ? c.bullets.join('\n') : (c.bullets || '')
+      }));
+    }
+
+    const sourceText = (notes_markdown || script || '').trim();
+    if (!sourceText) {
+      return [{
+        title: 'Topic Overview',
+        content: `Key concepts regarding ${topic || 'this topic'}. Review scripts and interactive 3D simulations for more details.`
+      }];
+    }
+
+    // 2. Try splitting by header markers '##'
+    if (sourceText.includes('##') || sourceText.startsWith('#')) {
+      const rawSections = sourceText.split(/(?=^#{1,3} )/m).filter(Boolean);
+      return rawSections.map((sec) => {
+        const lines = sec.trim().split('\n');
+        const titleLine = lines[0] || '';
+        const title = titleLine.replace(/^#{1,3}\s+/, '').trim();
+        const content = lines.slice(1).join('\n').trim();
+        return { title, content };
+      });
+    }
+
+    // 3. Try splitting by double newlines or numbered points
+    let rawParts = sourceText.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
+    if (rawParts.length <= 1) {
+      rawParts = sourceText.split(/(?=\d+\.\s)/).map(p => p.trim()).filter(Boolean);
+    }
+    if (rawParts.length <= 1) {
+      rawParts = sourceText.split('\n').map(p => p.trim()).filter(Boolean);
+    }
+
+    const generated = rawParts.map((part, idx) => {
+      let title = `Note Section ${idx + 1}`;
+      let content = part;
+
+      const match = part.match(/^(\d+\.\s*)(.*)/);
+      if (match) {
+        title = `Point ${match[1].trim()}`;
+        content = match[2];
+      } else if (part.length < 30) {
+        title = part;
+        content = '';
+      }
       return { title, content };
-    });
+    }).filter(c => c.content || c.title);
+
+    return generated.length > 0 ? generated : [{
+      title: 'Overview',
+      content: sourceText
+    }];
   };
 
-  const sections = parseMarkdown(notes_markdown);
+  const sections = buildCards();
 
   // Mini renderer formatting text, list items, and bold lines
   const renderCardContent = (content: string) => {
@@ -142,34 +191,28 @@ export default function AestheticNoteSheet({ topic, notes_markdown }: AestheticN
           </div>
 
           {/* Cards Grid */}
-          {sections.length === 0 ? (
-            <div className="text-center py-20 text-slate-400 font-handwritten text-md">
-              No content parsed. Add markdown tags like ## Header and - bullet items to generate cards.
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-6 items-stretch">
-              {sections.map((section, idx) => {
-                const color = colors[idx % colors.length] || colors[0];
-                return (
-                  <div 
-                    key={idx}
-                    className={`rounded-[24px] border ${color.border} ${color.bg} p-5 relative shadow-sm hover:shadow-md transition duration-200 flex flex-col`}
-                  >
-                    {/* Visual Masking Tape Element */}
-                    <div className={`absolute -top-3 left-1/2 -translate-x-1/2 w-16 h-5 ${color.tape} backdrop-blur-[0.5px] border-l border-r border-dashed rotate-[-1.5deg] shadow-sm`}></div>
+          <div className="grid grid-cols-2 gap-6 items-stretch">
+            {sections.map((section, idx) => {
+              const color = colors[idx % colors.length] || colors[0];
+              return (
+                <div 
+                  key={idx}
+                  className={`rounded-[24px] border ${color.border} ${color.bg} p-5 relative shadow-sm hover:shadow-md transition duration-200 flex flex-col`}
+                >
+                  {/* Visual Masking Tape Element */}
+                  <div className={`absolute -top-3 left-1/2 -translate-x-1/2 w-16 h-5 ${color.tape} backdrop-blur-[0.5px] border-l border-r border-dashed rotate-[-1.5deg] shadow-sm`}></div>
 
-                    <h4 className="text-md font-black font-handwritten-title text-slate-950 border-b border-slate-400/25 pb-2 mb-3.5 mt-1 tracking-wide">
-                      📌 {section.title}
-                    </h4>
+                  <h4 className="text-md font-black font-handwritten-title text-slate-950 border-b border-slate-400/25 pb-2 mb-3.5 mt-1 tracking-wide">
+                    📌 {section.title}
+                  </h4>
 
-                    <div className="flex-1">
-                      {renderCardContent(section.content)}
-                    </div>
+                  <div className="flex-1">
+                    {renderCardContent(section.content)}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Footer info line */}

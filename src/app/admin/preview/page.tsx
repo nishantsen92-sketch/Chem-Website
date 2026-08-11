@@ -654,6 +654,8 @@ export default function PreviewPage() {
                     <AestheticNoteSheet 
                       topic={activePreview.topic} 
                       notes_markdown={activePreview.notes_markdown} 
+                      notes_cards={(activePreview as any).notes_cards}
+                      script={activePreview.script}
                     />
                   </div>
                 </div>
