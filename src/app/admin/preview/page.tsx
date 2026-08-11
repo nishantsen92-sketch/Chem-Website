@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Lock, FileText, Smartphone, Printer, Check, Loader2, ShieldAlert, Sparkles, FolderOpen, ArrowLeft } from 'lucide-react';
+import { Lock, FileText, Smartphone, Printer, Check, Loader2, ShieldAlert, Sparkles, FolderOpen, ArrowLeft, Send } from 'lucide-react';
 
 interface TopicRow {
   id: string;
@@ -11,6 +11,11 @@ interface TopicRow {
   notes_markdown: string;
   status: string;
   created_at: string;
+}
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  text: string;
 }
 
 export default function PreviewPage() {
@@ -28,6 +33,14 @@ export default function PreviewPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [publishStatus, setPublishStatus] = useState<'idle' | 'publishing' | 'success' | 'error'>('idle');
+
+  // Vibe Coding Workspace States
+  const [isVibeModalOpen, setIsVibeModalOpen] = useState(false);
+  const [tempAppHtml, setTempAppHtml] = useState('');
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [promptInput, setPromptInput] = useState('');
+  const [isRefining, setIsRefining] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
 
   // Handle PIN input changes
   const handlePinChange = (val: string) => {
@@ -118,6 +131,109 @@ export default function PreviewPage() {
     } catch (err: any) {
       setPublishStatus('error');
       alert(err.message || 'Failed to publish draft.');
+    }
+  };
+
+  // Open Vibe Workspace
+  const handleOpenVibeWorkspace = () => {
+    if (!activePreview) return;
+    setTempAppHtml(activePreview.app_html);
+    setChatHistory([
+      {
+        role: 'assistant',
+        text: 'Hey Nishant Sir! Describe the adjustments or UI changes you want to apply to this 3D app. I will regenerate the HTML code for you in real-time.',
+      },
+    ]);
+    setPromptInput('');
+    setIsVibeModalOpen(true);
+  };
+
+  // Call Gemini to refine app
+  const handleApplyRefine = async () => {
+    if (!promptInput.trim() || isRefining) return;
+
+    const userPrompt = promptInput.trim();
+    setChatHistory((prev) => [...prev, { role: 'user', text: userPrompt }]);
+    setPromptInput('');
+    setIsRefining(true);
+
+    try {
+      const res = await fetch('/api/refine-app', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: userPrompt,
+          current_app_html: tempAppHtml,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to refine app code.');
+      }
+
+      const data = await res.json();
+      setTempAppHtml(data.updated_html);
+      setChatHistory((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          text: 'I have successfully updated the simulation code! You can review the changes in the live simulator panel to the right.',
+        },
+      ]);
+    } catch (err: any) {
+      setChatHistory((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          text: `⚠️ Error modifying simulation: ${err.message || 'Unknown network error.'}`,
+        },
+      ]);
+    } finally {
+      setIsRefining(false);
+    }
+  };
+
+  // Persist updated app code back to database
+  const handleSaveAndDone = async () => {
+    if (!activePreview) return;
+    setSaveStatus('saving');
+
+    try {
+      const res = await fetch('/api/draft', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: activePreview.id,
+          app_html: tempAppHtml,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to update draft in database.');
+      }
+
+      // Update local memory state object
+      if (selectedArchive) {
+        setSelectedArchive((prev) => (prev ? { ...prev, app_html: tempAppHtml } : null));
+        setArchiveList((prevList) =>
+          prevList.map((item) =>
+            item.id === selectedArchive.id ? { ...item, app_html: tempAppHtml } : item
+          )
+        );
+      } else if (draft) {
+        setDraft((prev) => (prev ? { ...prev, app_html: tempAppHtml } : null));
+      }
+
+      setSaveStatus('success');
+      setTimeout(() => {
+        setIsVibeModalOpen(false);
+        setSaveStatus('idle');
+      }, 1000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to save changes.');
+      setSaveStatus('idle');
     }
   };
 
@@ -455,14 +571,25 @@ export default function PreviewPage() {
 
               {/* COLUMN 2: MOBILE APP SIMULATOR */}
               <div className="column-sim bg-[#111827]/80 border border-slate-800/80 rounded-3xl p-5 md:p-6 flex flex-col gap-4 no-print items-center min-h-[600px]">
-                <div className="w-full flex items-center border-b border-slate-800 pb-3 self-stretch">
+                <div className="w-full flex items-center justify-between border-b border-slate-800 pb-3 self-stretch">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-400/20 flex items-center justify-center text-purple-400 shrink-0">
                       <Smartphone size={16} />
                     </div>
-                    <h3 className="text-xs font-black uppercase tracking-wider text-white">Live Web App Simulator</h3>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-white">Live Web App</h3>
                   </div>
-                  <span className="ml-auto text-[8px] font-bold text-slate-500 font-mono uppercase bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded">HTML5/WebGL</span>
+                  
+                  {/* Refinement trigger buttons in header */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleOpenVibeWorkspace}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-[9px] font-black rounded-lg border border-purple-500/30 transition cursor-pointer"
+                    >
+                      <Sparkles size={8} />
+                      <span>Refine 3D App</span>
+                    </button>
+                    <span className="text-[8px] font-bold text-slate-500 font-mono uppercase bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded">HTML5/WebGL</span>
+                  </div>
                 </div>
 
                 {/* Mobile Bezels & iframe */}
@@ -517,6 +644,161 @@ export default function PreviewPage() {
 
             </div>
           )}
+
+        </div>
+      )}
+
+      {/* ── FULL-SCREEN VIBE CODING WORKSPACE OVERLAY MODAL ── */}
+      {isVibeModalOpen && activePreview && (
+        <div className="fixed inset-0 z-50 bg-[#0b0f19] flex flex-col no-print select-none">
+          
+          {/* Modal Header Control Bar */}
+          <div className="flex justify-between items-center bg-[#0d1624] border-b border-slate-800/80 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <Sparkles className="text-purple-400 animate-pulse" size={18} />
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-wider text-purple-300 font-mono">
+                  Vibe Coding Workspace
+                </h3>
+                <span className="text-xs font-bold text-slate-350 block mt-0.5">
+                  Refining 3D Simulator: {activePreview.topic}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* Cancel Close button */}
+              <button
+                onClick={() => setIsVibeModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-xs font-bold rounded-xl border border-slate-700 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              
+              {/* Save & Done submit */}
+              <button
+                onClick={handleSaveAndDone}
+                disabled={saveStatus === 'saving'}
+                className="px-5 py-2 inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-750 active:scale-95 disabled:opacity-50 text-white text-xs font-black rounded-xl shadow-md shadow-purple-500/20 transition cursor-pointer"
+              >
+                {saveStatus === 'saving' ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin text-white" />
+                    <span>SAVING CODE...</span>
+                  </>
+                ) : saveStatus === 'success' ? (
+                  <>
+                    <Check size={12} className="stroke-[3]" />
+                    <span>SAVED!</span>
+                  </>
+                ) : (
+                  <>
+                    <span>💾 Save &amp; Done</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Modal Columns (40% Chatbox + 60% Simulator Sandbox) */}
+          <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+            
+            {/* LEFT COLUMN: Vibe Coding Chatbox (40%) */}
+            <div className="w-full md:w-[40%] bg-[#0e1626] border-r border-slate-800 flex flex-col justify-between overflow-hidden">
+              
+              {/* Chat Log history list */}
+              <div className="flex-1 overflow-y-auto p-5 md:p-6 space-y-4">
+                {chatHistory.map((msg, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`flex flex-col max-w-[85%] ${
+                      msg.role === 'user' ? 'ml-auto items-end' : 'mr-auto items-start'
+                    }`}
+                  >
+                    <span className="text-[8px] font-bold text-slate-500 font-mono uppercase tracking-wider mb-1 block">
+                      {msg.role === 'user' ? 'You' : 'Gemini AI Assistant'}
+                    </span>
+                    <div 
+                      className={`p-3.5 rounded-2xl text-xs leading-relaxed font-medium ${
+                        msg.role === 'user'
+                          ? 'bg-purple-600 text-white rounded-tr-none'
+                          : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-tl-none shadow-sm'
+                      }`}
+                    >
+                      {msg.text}
+                    </div>
+                  </div>
+                ))}
+
+                {isRefining && (
+                  <div className="flex items-center gap-2 text-purple-400 text-xs font-mono font-bold py-2">
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Gemini is updating simulation code...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Chat Prompt input controls */}
+              <div className="p-4 bg-[#0d1320] border-t border-slate-800/80 flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <textarea
+                    value={promptInput}
+                    onChange={(e) => setPromptInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleApplyRefine();
+                      }
+                    }}
+                    placeholder="e.g. Change the atom colors to neon red, or add labels for all dipole bonds..."
+                    className="flex-1 bg-[#111827] border border-slate-800 focus:border-purple-500 rounded-xl p-3 text-xs text-white outline-none resize-none h-18 placeholder-slate-500 font-medium font-sans"
+                    disabled={isRefining}
+                  />
+                  <button
+                    onClick={handleApplyRefine}
+                    disabled={!promptInput.trim() || isRefining}
+                    className="px-4.5 bg-purple-600 hover:bg-purple-750 disabled:opacity-50 text-white rounded-xl active:scale-95 transition flex items-center justify-center cursor-pointer"
+                    title="Send instructions"
+                  >
+                    <Send size={15} />
+                  </button>
+                </div>
+                <span className="text-[8px] text-slate-500 font-mono block text-left">
+                  Press Enter to apply, Shift+Enter for new line. Gemini automatically updates code structures.
+                </span>
+              </div>
+
+            </div>
+
+            {/* RIGHT COLUMN: Browser Sandbox Simulator Frame (60%) */}
+            <div className="flex-1 bg-slate-950 flex flex-col overflow-hidden">
+              
+              {/* Virtual URL address bar */}
+              <div className="bg-[#111827] border-b border-slate-800 px-4 py-2 flex items-center gap-2 no-print shrink-0">
+                <div className="flex gap-1.5 shrink-0">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-500/80"></div>
+                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80"></div>
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80"></div>
+                </div>
+                <div className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1 flex items-center justify-between text-[9px] font-mono text-slate-400">
+                  <span>http://localhost:3000/simulators/vibe-coding-preview</span>
+                  <span className="text-purple-400">HOT RELOAD READY ⚡</span>
+                </div>
+              </div>
+
+              {/* Full-bleed sandbox iframe rendering */}
+              <div className="flex-1 relative bg-slate-900">
+                <iframe
+                  srcDoc={tempAppHtml}
+                  className="w-full h-full border-none"
+                  title="Workspace Sim View"
+                  sandbox="allow-scripts"
+                />
+              </div>
+
+            </div>
+
+          </div>
 
         </div>
       )}

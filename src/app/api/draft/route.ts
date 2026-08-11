@@ -82,3 +82,30 @@ export async function GET() {
     );
   }
 }
+
+export async function PUT(request: Request) {
+  try {
+    const { id, app_html } = await request.json();
+
+    if (!id) {
+      return NextResponse.json({ error: 'Topic ID is required to update draft.' }, { status: 400 });
+    }
+
+    // Update the simulation code in database
+    const { error } = await supabaseAdmin
+      .from('chemistry_topics')
+      .update({ app_html })
+      .eq('id', id);
+
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json({ success: true, message: 'Draft simulation updated successfully.' });
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: error.message || 'Failed to update draft.' },
+      { status: 500 }
+    );
+  }
+}
