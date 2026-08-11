@@ -17,9 +17,27 @@ export default function AestheticNoteSheet({ topic, notes_markdown, notes_cards 
   
   // Build visual segments safely, resolving fallback text blocks if empty
   const buildCards = (): Section[] => {
+    // Helper to check if text is a JSON array of cards
+    const tryParseJSONCards = (text: string) => {
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+      return null;
+    };
+
     // 1. Check if structured notes array is already populated
     if (notes_cards && Array.isArray(notes_cards) && notes_cards.length > 0) {
       return notes_cards.map((c) => ({
+        title: c.title || 'Summary Details',
+        content: Array.isArray(c.bullets) ? c.bullets.join('\n') : (c.bullets || '')
+      }));
+    }
+
+    // 2. Check if notes_markdown is a JSON string of cards
+    const parsedJSONCards = tryParseJSONCards(notes_markdown || '');
+    if (parsedJSONCards && parsedJSONCards.length > 0) {
+      return parsedJSONCards.map((c: any) => ({
         title: c.title || 'Summary Details',
         content: Array.isArray(c.bullets) ? c.bullets.join('\n') : (c.bullets || '')
       }));
@@ -33,7 +51,7 @@ export default function AestheticNoteSheet({ topic, notes_markdown, notes_cards 
       }];
     }
 
-    // 2. Try splitting by header markers '##'
+    // 3. Try splitting by header markers '##'
     if (sourceText.includes('##') || sourceText.startsWith('#')) {
       const rawSections = sourceText.split(/(?=^#{1,3} )/m).filter(Boolean);
       return rawSections.map((sec) => {
@@ -45,7 +63,7 @@ export default function AestheticNoteSheet({ topic, notes_markdown, notes_cards 
       });
     }
 
-    // 3. Try splitting by double newlines or numbered points
+    // 4. Try splitting by double newlines or numbered points
     let rawParts = sourceText.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
     if (rawParts.length <= 1) {
       rawParts = sourceText.split(/(?=\d+\.\s)/).map(p => p.trim()).filter(Boolean);
