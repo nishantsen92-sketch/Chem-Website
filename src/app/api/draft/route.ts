@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 
-const getFilePath = () => path.join(process.cwd(), 'draft_content.json');
+const getFilePath = () => path.join('/tmp', 'draft_content.json');
 
 export async function POST(request: Request) {
   try {
