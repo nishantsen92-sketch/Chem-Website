@@ -1,27 +1,38 @@
 import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '../../../lib/supabase';
 
 export async function POST(request: Request) {
   try {
-    const { pin } = await request.json();
+    const { pin, id } = await request.json();
 
     // Verify authentication PIN
     if (pin !== '312000') {
       return NextResponse.json({ error: 'Invalid PIN!' }, { status: 401 });
     }
 
+    if (!id) {
+      return NextResponse.json({ error: 'Topic ID is required to publish.' }, { status: 400 });
+    }
+
+    // Update row status to 'published' in database
+    const { error: dbError } = await supabaseAdmin
+      .from('chemistry_topics')
+      .update({ status: 'published' })
+      .eq('id', id);
+
+    if (dbError) {
+      throw dbError;
+    }
+
     // Trigger n8n webhook approval call
     try {
-      const response = await fetch('http://localhost:5678/webhook/approve-publish', {
+      await fetch('http://localhost:5678/webhook/approve-publish', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ approved: true }),
+        body: JSON.stringify({ approved: true, id }),
       });
-
-      if (!response.ok) {
-        console.warn(`Webhook responded with status: ${response.status}`);
-      }
     } catch (webhookError: any) {
       // Log the warning but do not crash the request; n8n might be offline during dev
       console.warn('Could not contact n8n webhook server:', webhookError.message);
