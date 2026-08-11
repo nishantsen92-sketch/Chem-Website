@@ -6,7 +6,6 @@ interface AestheticNoteSheetProps {
   topic: string;
   notes_markdown: string;
   notes_cards?: any[];
-  script?: string;
 }
 
 interface Section {
@@ -14,7 +13,7 @@ interface Section {
   content: string;
 }
 
-export default function AestheticNoteSheet({ topic, notes_markdown, notes_cards, script }: AestheticNoteSheetProps) {
+export default function AestheticNoteSheet({ topic, notes_markdown, notes_cards }: AestheticNoteSheetProps) {
   
   // Build visual segments safely, resolving fallback text blocks if empty
   const buildCards = (): Section[] => {
@@ -26,11 +25,11 @@ export default function AestheticNoteSheet({ topic, notes_markdown, notes_cards,
       }));
     }
 
-    const sourceText = (notes_markdown || script || '').trim();
+    const sourceText = (notes_markdown || '').trim();
     if (!sourceText) {
       return [{
-        title: 'Topic Overview',
-        content: `Key concepts regarding ${topic || 'this topic'}. Review scripts and interactive 3D simulations for more details.`
+        title: 'Academic Notes',
+        content: 'Generating academic notes for this topic...'
       }];
     }
 
