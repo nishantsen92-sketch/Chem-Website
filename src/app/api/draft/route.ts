@@ -32,26 +32,22 @@ export async function POST(request: Request) {
     const script = content.script || '';
     const app_html = content.app_html || content.interactive_app || '';
     
-    // Extract notes inputs safely
+    // Extract notes inputs safely and stringify structured card objects into the notes_markdown column
     const notesCards = content.notes_cards || content.output?.notes_cards || null;
-    const notes_markdown = content.notes_markdown || content.output?.notes_markdown || (typeof notesCards === 'object' && notesCards !== null ? JSON.stringify(notesCards) : '');
+    const notes_markdown = notesCards ? JSON.stringify(notesCards) : (content.notes_markdown || content.output?.notes_markdown || '');
 
-    // Insert new draft row in chemistry_topics
-    const insertPayload: any = {
-      topic,
-      script,
-      app_html,
-      notes_markdown,
-      status: 'draft'
-    };
-
-    if (notesCards) {
-      insertPayload.notes_cards = notesCards;
-    }
-
+    // Insert new draft row in chemistry_topics with existing columns only
     const { error } = await supabaseAdmin
       .from('chemistry_topics')
-      .insert([insertPayload]);
+      .insert([
+        {
+          topic,
+          script,
+          app_html,
+          notes_markdown,
+          status: 'draft'
+        }
+      ]);
 
     if (error) {
       throw error;
@@ -92,18 +88,17 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const { id, script, app_html, image_url, notes_cards, notes_markdown } = await request.json();
+    const { id, script, app_html, image_url, notes_markdown } = await request.json();
 
     if (!id) {
       return NextResponse.json({ error: 'Topic ID is required to update draft.' }, { status: 400 });
     }
 
-    // Build the dynamic update payload
+    // Build the dynamic update payload using existing columns only
     const updateData: any = {};
     if (script !== undefined) updateData.script = script;
     if (app_html !== undefined) updateData.app_html = app_html;
     if (image_url !== undefined) updateData.image_url = image_url;
-    if (notes_cards !== undefined) updateData.notes_cards = notes_cards;
     if (notes_markdown !== undefined) updateData.notes_markdown = notes_markdown;
 
     // Update the record in Supabase
