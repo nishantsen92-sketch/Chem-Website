@@ -4,26 +4,53 @@ import { supabaseAdmin } from '../../../lib/supabase';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    
+    let content = body;
+
+    // Check if the actual payload is wrapped inside body.output as a string (e.g. from LLM code block outputs)
+    if (body && typeof body.output === 'string') {
+      try {
+        let cleanedString = body.output.trim();
+        
+        // Strip markdown code blocks: e.g. ```json ... ```
+        if (cleanedString.startsWith('```json')) {
+          cleanedString = cleanedString.substring(7);
+        } else if (cleanedString.startsWith('```')) {
+          cleanedString = cleanedString.substring(3);
+        }
+        if (cleanedString.endsWith('```')) {
+          cleanedString = cleanedString.substring(0, cleanedString.length - 3);
+        }
+        
+        content = JSON.parse(cleanedString.trim());
+      } catch (parseError: any) {
+        console.warn('Failed to parse body.output as JSON, using raw body:', parseError.message);
+      }
+    }
+
+    // Safely extract properties with fallback schema support
+    const topic = content.topic || 'Untitled Topic';
+    const script = content.script || '';
+    const app_html = content.app_html || content.interactive_app || '';
+    const notes_markdown = content.notes_markdown || content.notes || '';
+
     // Insert new draft row in chemistry_topics
-    const { data, error } = await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from('chemistry_topics')
       .insert([
         {
-          topic: body.topic,
-          script: body.script,
-          app_html: body.app_html,
-          notes_markdown: body.notes_markdown,
+          topic,
+          script,
+          app_html,
+          notes_markdown,
           status: 'draft'
         }
-      ])
-      .select();
+      ]);
 
     if (error) {
       throw error;
     }
 
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, message: 'Draft saved successfully' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to save draft.' }, { status: 500 });
   }
