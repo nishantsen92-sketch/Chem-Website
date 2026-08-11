@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Lock, FileText, Smartphone, Printer, Check, Loader2, ShieldAlert, Sparkles, FolderOpen, ArrowLeft, Send, Calendar, Copy, Download, Image as ImageIcon } from 'lucide-react';
+import { toPng } from 'html-to-image';
+import AestheticNoteSheet from '../../../components/AestheticNoteSheet';
 
 interface TopicRow {
   id: string;
@@ -236,6 +238,39 @@ export default function PreviewPage() {
     } finally {
       setIsCopilotRunning(false);
     }
+  };
+
+  // Export AestheticNoteSheet to PNG image
+  const handleDownloadNoteSheet = () => {
+    const node = document.getElementById('aesthetic-note-sheet');
+    if (!node) {
+      alert('Aesthetic notes sheet container not found.');
+      return;
+    }
+
+    setCopilotStatusMsg('Generating high-res PNG image...');
+    
+    toPng(node, { 
+      quality: 0.98, 
+      pixelRatio: 2, 
+      style: {
+        transform: 'scale(1)',
+        transformOrigin: 'top left'
+      }
+    })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `${activePreview?.topic.toLowerCase().replace(/[^a-z0-9]/g, '_')}_revision_sheet.png`;
+        link.href = dataUrl;
+        link.click();
+        setCopilotStatusMsg('Notes sheet exported successfully.');
+        setTimeout(() => setCopilotStatusMsg(''), 3000);
+      })
+      .catch((error) => {
+        console.error('Failed to export notes sheet image:', error);
+        alert('Failed to generate high-resolution image. Try using window print option instead.');
+        setCopilotStatusMsg('');
+      });
   };
 
   // Active preview object
@@ -600,28 +635,25 @@ export default function PreviewPage() {
 
               {/* TAB 3: Handwritten Notes Sheet */}
               {activeWorkspaceTab === 'image' && (
-                <div className="w-full max-w-xl bg-[#111827]/80 border border-slate-800/80 rounded-3xl p-5 flex flex-col h-[520px] shadow-lg animate-fadeIn text-left">
+                <div className="w-full max-w-4xl bg-[#111827]/80 border border-slate-800/80 rounded-3xl p-5 flex flex-col h-[640px] shadow-lg animate-fadeIn text-left">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4 select-none">
                     <span className="text-xs font-black text-white uppercase tracking-wider font-mono">
                       🖼️ Handwritten Note Sheet
                     </span>
-                    <a
-                      href={activePreview.image_url || 'https://images.unsplash.com/photo-1532187643603-ba119ca4109e?auto=format&fit=crop&w=800&q=80'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-[10px] font-black rounded-lg border border-slate-700 transition cursor-pointer"
+                    <button
+                      onClick={handleDownloadNoteSheet}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-[10px] font-black rounded-lg border border-slate-700 transition cursor-pointer"
                     >
                       <Download size={11} />
-                      <span>Download High-Res JPG</span>
-                    </a>
+                      <span>Download High-Res Note Sheet</span>
+                    </button>
                   </div>
                   
-                  {/* Pinterest-style Image Container */}
-                  <div className="flex-1 rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 flex items-center justify-center p-4 relative group">
-                    <img 
-                      src={activePreview.image_url || 'https://images.unsplash.com/photo-1532187643603-ba119ca4109e?auto=format&fit=crop&w=800&q=80'}
-                      alt="Handwritten Notes Preview" 
-                      className="max-h-full max-w-full object-contain rounded-lg shadow-2xl transition duration-300 hover:scale-[1.01]"
+                  {/* Scrollable container displaying the live render Aesthetic Note Sheet */}
+                  <div className="flex-1 rounded-2xl overflow-y-auto border border-slate-800 bg-slate-950/80 p-6 flex justify-center items-start">
+                    <AestheticNoteSheet 
+                      topic={activePreview.topic} 
+                      notes_markdown={activePreview.notes_markdown} 
                     />
                   </div>
                 </div>
