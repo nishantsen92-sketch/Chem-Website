@@ -27,24 +27,21 @@ export async function POST(request: Request) {
       }
     }
 
-    // Safely extract properties with fallback schema support
-    const topic = content.topic || 'Untitled Topic';
-    const script = content.script || '';
-    const app_html = content.app_html || content.interactive_app || '';
-    
-    // Extract notes inputs safely and stringify structured card objects into the notes_markdown column
-    const notesCards = content.notes_cards || content.output?.notes_cards || null;
-    const notes_markdown = notesCards ? JSON.stringify(notesCards) : (content.notes_markdown || content.output?.notes_markdown || '');
+    // Safely extract properties from the incoming body
+    const { topic, script, app_html, notes_cards, notes_markdown, image_prompt } = content;
 
-    // Insert new draft row in chemistry_topics with existing columns only
+    // Handle Notes Storage
+    const finalNotesMarkdown = notes_cards ? JSON.stringify(notes_cards) : (notes_markdown || '');
+
+    // Insert new draft row in chemistry_topics with allowed schema columns only
     const { error } = await supabaseAdmin
       .from('chemistry_topics')
       .insert([
         {
-          topic,
-          script,
-          app_html,
-          notes_markdown,
+          topic: topic || 'Untitled Topic',
+          script: script || '',
+          app_html: app_html || '',
+          notes_markdown: finalNotesMarkdown,
           status: 'draft'
         }
       ]);
