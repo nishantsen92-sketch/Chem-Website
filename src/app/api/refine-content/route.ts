@@ -33,10 +33,10 @@ User modification instructions:
 ${prompt}`;
     } else {
       // target === 'image'
-      systemPrompt = `You are an expert chemistry graphic designer. Based on the user's instructions for the notes card, generate a list of exact image search terms. Output exactly two English keywords separated by a comma (and nothing else). Examples: 'molecules,bonds' or 'beaker,laboratory'.
+      systemPrompt = `You are an expert chemistry graphic designer. Expand the user's instructions for a chemistry note sheet into a detailed, descriptive image generation prompt (describing visual elements, colors, chemical formulas, and diagrams). Output ONLY the descriptive prompt under 75 words without any preambles or markdown formatting wrappers.
 
 Topic: ${topic}
-User modification instructions:
+User instructions:
 ${prompt}`;
     }
 
@@ -86,10 +86,48 @@ ${prompt}`;
       return NextResponse.json({ app_html: text.trim() });
     } else {
       // target === 'image'
-      const keywords = text.replace(/[^a-zA-Z0-9,]/g, '').trim().toLowerCase();
-      // Generate a dynamic high-quality note-taking/chemical image URL based on keywords
-      const image_url = `https://images.unsplash.com/photo-1532187643603-ba119ca4109e?auto=format&fit=crop&w=800&q=80&sig=${Math.floor(Math.random() * 10000)}&q=${encodeURIComponent(keywords)}`;
-      return NextResponse.json({ image_url });
+      // Prepend the required strict 2D Pinterest Infographic guidelines
+      const enforcedStyle = "Vertical 2D flat visual infographic study sheet on grid paper background, Pinterest handwritten aesthetic, pastel containers, doodle diagrams, clean educational poster. STRICTLY NO REAL WORLD PHOTOGRAPHY, NO 3D REALISTIC RENDERS. ";
+      const fullImagePrompt = enforcedStyle + text;
+
+      try {
+        const imagenResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:generateImages?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              prompt: fullImagePrompt,
+              numberOfImages: 1,
+              outputMimeType: 'image/jpeg',
+              aspectRatio: '3:4',
+            }),
+          }
+        );
+
+        if (!imagenResponse.ok) {
+          const errText = await imagenResponse.text();
+          throw new Error(`Imagen API error: ${errText}`);
+        }
+
+        const imagenJson = await imagenResponse.json();
+        const base64Bytes = imagenJson.generatedImages?.[0]?.image?.imageBytes;
+        if (!base64Bytes) {
+          throw new Error('Imagen response did not contain imageBytes.');
+        }
+
+        const image_url = `data:image/jpeg;base64,${base64Bytes}`;
+        return NextResponse.json({ image_url });
+      } catch (imagenError: any) {
+        console.warn('Imagen generation failed, falling back to Unsplash:', imagenError.message);
+        
+        // Fallback to Unsplash chemistry note search query
+        const keywords = topic.toLowerCase().replace(/[^a-z0-9]/g, ',');
+        const image_url = `https://images.unsplash.com/photo-1532187643603-ba119ca4109e?auto=format&fit=crop&w=800&q=80&sig=${Math.floor(Math.random() * 10000)}&q=${encodeURIComponent(keywords)}`;
+        return NextResponse.json({ image_url });
+      }
     }
   } catch (error: any) {
     return NextResponse.json(
